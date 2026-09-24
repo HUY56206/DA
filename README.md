@@ -5,10 +5,11 @@
 ## Tính năng
 
 - **Real-Time Updates**: app tự cập nhật định kỳ (5–120 giây, tùy chỉnh) qua `streamlit-autorefresh`; metrics và biểu đồ làm mới ngay trên trang — không cần bấm refresh.
-- **Dữ liệu thật**: lich sử OHLCV của `META` (hoặc 7 mã: AAPL, MSFT, GOOGL, AMZN, NVDA, TSLA) lấy trực tiếp từ **Yahoo Finance**, không cần API key.
+- **Biểu đồ trượt theo thời gian**: ở chế độ *mô phỏng tick real-time*, mỗi lần refresh app tự thêm 1 tick và chỉ hiển thị 90 nốt gần nhất → biểu đồ **dịch chuyển sang phải theo thời gian thực** (sliding window), kèm chấm sáng đỏ cho giá mới nhất.
+- **Dữ liệu thật**: lịch sử OHLCV của `META` (hoặc 7 mã: AAPL, MSFT, GOOGL, AMZN, NVDA, TSLA) lấy trực tiếp từ **Yahoo Finance**, không cần API key.
 - **Hàm lượng khoa học**:
-  - Biểu đồ chính: area line + marker màu theo lợi suất hàng ngày (RdYlGn), volume, SMA 20/50.
-  - Phân tích kỹ thuật: **RSI(14)**, **MACD (12,26,9)**, **Bollinger Bands (SMA20 ± 2σ)**.
+  - Biểu đồ chính sáng tạo: line chia đoạn **xanh/đỏ theo trend** + marker gradient RdYlGn (lợi suất ngày) + vùng lấp đầy + volume.
+  - Phân tích kỹ thuật: **RSI(14)**, **MACD (12,26,9)**, **Bollinger Bands (SMA20 ± 2σ)**, SMA 20/50.
   - Metrics: lợi suất 1 năm, **độ biến động annualized (Vol20)**, **Sharpe ratio**, **Maximum Drawdown**, khối lượng.
   - **Heatmap tương quan** lợi suất giữa các cổ phiếu trong danh mục.
 

@@ -25,6 +25,7 @@ TICKERS = {
     "TSLA": "Tesla",
 }
 LOOKBACK_DAYS = 365
+WINDOW = 90  # so nuoc cuoi cung hien thi -> cua so truot
 
 
 # ----------------------------------------------------------------------------
@@ -61,7 +62,7 @@ def fetch_history(ticker: str, days: int = LOOKBACK_DAYS) -> pd.DataFrame:
 
 
 # ----------------------------------------------------------------------------
-# Chi bao ky thuat (dung luong khoa hoc)
+# Chi bao ky thuat
 # ----------------------------------------------------------------------------
 def rsi(close: pd.Series, period: int = 14) -> pd.Series:
     delta = close.diff()
@@ -90,7 +91,7 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["BB_up"] = mid + 2 * std
     df["BB_low"] = mid - 2 * std
 
-    df["Vol20"] = df["Return"].rolling(20).std() * np.sqrt(252)  # do bien dong nam
+    df["Vol20"] = df["Return"].rolling(20).std() * np.sqrt(252)
     df["Drawdown"] = df["Close"] / df["Close"].cummax() - 1
     return df
 
@@ -120,47 +121,83 @@ def compute_metrics(df: pd.DataFrame) -> dict:
 # Bieu do Plotly
 # ----------------------------------------------------------------------------
 def overview_chart(df: pd.DataFrame, sma: bool = True) -> go.Figure:
-    """Bieu do chinh (area line + marker mau theo loi suat) + volume."""
+    """Bieu do sang tao: line chia doan xanh/do theo trend + marker gradient
+    theo loi suat + duoi phat sang + volume. Cua so truot (WINDOW)."""
+    d = df.tail(WINDOW).reset_index(drop=True)
+    rets = d["Return"].fillna(0)
+
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
                         row_heights=[0.75, 0.25], vertical_spacing=0.04)
 
+    # 1) Lop nen: area fill mo mau xanh
     fig.add_trace(go.Scatter(
-        x=df["Date"], y=df["Close"], mode="lines", name="Close",
-        line=dict(color="rgba(70, 130, 220, 0.9)", width=2),
-        fill="tozeroy", fillcolor="rgba(70, 130, 220, 0.12)",
+        x=d["Date"], y=d["Close"], mode="lines", name="Close",
+        line=dict(width=0), fill="tozeroy",
+        fillcolor="rgba(70, 130, 220, 0.10)",
+        hoverinfo="skip",
+    ), row=1, col=1)
+
+    # 2) Line chia doan theo trend: doan tang = xanh, doan giam = do
+    sig = np.sign(rets)
+    i, n = 0, len(d)
+    while i < n:
+        j = i
+        while j < n and sig[j] == sig[i]:
+            j += 1
+        color = "#2ecc71" if sig[i] > 0 else ("#e74c3c" if sig[i] < 0 else "#95a5a6")
+        start = max(i - 1, 0)
+        fig.add_trace(go.Scatter(
+            x=d["Date"].iloc[start:j], y=d["Close"].iloc[start:j],
+            mode="lines", line=dict(color=color, width=3),
+            name="", showlegend=False, hoverinfo="skip",
+        ), row=1, col=1)
+        i = j
+
+    # 3) Marker gradient theo loi suat (xanh-vang-do) + bubble size
+    sizes = (7 + 2.4 * rets.abs()).clip(7, 14)
+    fig.add_trace(go.Scatter(
+        x=d["Date"], y=d["Close"], mode="markers", name="Return",
+        marker=dict(size=sizes, color=rets, colorscale="RdYlGn",
+                    cmin=-4, cmax=4, line=dict(color="white", width=0.7),
+                    showscale=True,
+                    colorbar=dict(title="Return %", thickness=13, len=0.7, outlinewidth=0)),
+        hovertemplate="%{x|%d/%m}<br>Close: $%{y:.2f}<br>Return: %{marker.color:.2f}%<extra></extra>",
+    ), row=1, col=1)
+
+    # 4) Duoi phat sang: 10 diem gan nhat
+    tail = d.tail(10)
+    glow = np.linspace(0.35, 1.0, len(tail))
+    fig.add_trace(go.Scatter(
+        x=tail["Date"], y=tail["Close"], mode="markers", name="Latest",
+        marker=dict(size=17, color=glow, colorscale="Reds",
+                    line=dict(color="white", width=1.5)),
+        hoverinfo="skip",
     ), row=1, col=1)
 
     if sma:
         for col, color, name in (("SMA20", "#ffd54f", "SMA20"),
-                                 ("SMA50", "#9e9ef0", "SMA50")):
-            fig.add_trace(go.Scatter(x=df["Date"], y=df[col], name=name,
+                                 ("SMA50", "#8e99ff", "SMA50")):
+            fig.add_trace(go.Scatter(x=d["Date"], y=d[col], name=name,
                                      line=dict(color=color, width=1.2)),
                           row=1, col=1)
 
-    fig.add_trace(go.Scatter(
-        x=df["Date"], y=df["Close"], mode="markers", name="Return",
-        marker=dict(size=9, color=df["Return"].fillna(0), colorscale="RdYlGn",
-                    cmin=-4, cmax=4, line=dict(color="white", width=0.6),
-                    showscale=True, colorbar=dict(title="Daily return %")),
-    ), row=1, col=1)
-
-    vol_colors = np.where(df["Close"] >= df["Open"], "#26a69a", "#ef5350")
-    fig.add_trace(go.Bar(x=df["Date"], y=df["Volume"], name="Volume",
+    # 5) Volume theo ngay tang/giam
+    vol_colors = np.where(d["Close"] >= d["Open"], "#26a69a", "#ef5350")
+    fig.add_trace(go.Bar(x=d["Date"], y=d["Volume"], name="Volume",
                          marker_color=vol_colors, opacity=0.7),
                   row=2, col=1)
 
     fig.update_layout(
         template="plotly_white", hovermode="x unified", height=560,
-        margin=dict(t=30, b=30, l=50, r=60), showlegend=True,
+        margin=dict(t=30, b=30, l=50, r=70), showlegend=True,
+        uirevision="fixed",
     )
     fig.update_yaxes(title_text="Price (USD)", row=1, col=1)
-    fig.update_yaxes(title_text="Volume", row=2, col=1,
-                     showticklabels=False)
+    fig.update_yaxes(title_text="Volume", row=2, col=1, showticklabels=False)
     return fig
 
 
 def technical_chart(df: pd.DataFrame) -> go.Figure:
-    """Bieu do phan tich ky thuat: gia + BB, RSI, MACD."""
     fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
                         row_heights=[0.5, 0.25, 0.25], vertical_spacing=0.05)
 
@@ -190,7 +227,7 @@ def technical_chart(df: pd.DataFrame) -> go.Figure:
 
     fig.update_layout(template="plotly_white", hovermode="x unified",
                       height=760, margin=dict(t=30, b=30, l=50, r=20))
-    fig.update_yaxes(title_text="Price", row=1, col=1, range=[None, None])
+    fig.update_yaxes(title_text="Price", row=1, col=1)
     fig.update_yaxes(title_text="RSI", row=2, col=1, range=[0, 100])
     fig.update_yaxes(title_text="MACD", row=3, col=1)
     return fig
@@ -225,29 +262,55 @@ ticker = st.sidebar.selectbox("Co phieu", options=list(TICKERS),
 interval = st.sidebar.slider("Tan suat cap nhat (giay)", 5, 120, 30, 5)
 days = st.sidebar.slider("So ngay du lieu", 180, 730, 365, 30)
 show_sma = st.sidebar.checkbox("Hien thi SMA 20/50", value=True)
+demo_mode = st.sidebar.checkbox(
+    "Mo phong tick real-time (bieu do truot theo thoi gian)", value=True)
 
-# ============ REAL-TIME UPDATES: tu dong chay lai app moi interval ============
 st_autorefresh(interval=interval * 1000, key="realtime")
 
-st.title("Meta Platforms (META) - Realtime Dashboard")
+now = dt.datetime.now()
+st.title("Realtime Dashboard - Chuyen dong theo thoi gian")
 st.caption(
-    f"Cap nhat luc {dt.datetime.now().strftime('%H:%M:%S')} "
-    f"| cu {interval}s moi lan | nguon: Yahoo Finance"
+    f"Cap nhat luc {now.strftime('%H:%M:%S')} | moi {interval}s | nguon: Yahoo Finance"
 )
 
-try:
-    df = fetch_history(ticker, days)
-    if df.empty:
-        st.error("Khong lay duoc du lieu. Vui long thu lai sau giay lat.")
-        st.stop()
-except Exception as exc:
-    st.error(f"Loi tai du lieu: {exc}")
+df_real = fetch_history(ticker, days)
+if df_real.empty:
+    st.error("Khong lay duoc du lieu. Vui long thu lai sau giay lat.")
     st.stop()
+
+# ----------------------------------------------------------------------------
+# Trang thai demo: moi lan refresh them 1 tick, cua so truot ve phai
+# ----------------------------------------------------------------------------
+if "ticker" not in st.session_state or st.session_state.ticker != ticker:
+    st.session_state.ticker = ticker
+    st.session_state.demo_price = float(df_real["Close"].iloc[-1])
+    st.session_state.demo_ticks = []
+    st.session_state.tick_count = 0
+
+if demo_mode:
+    price = st.session_state.demo_price * (1 + np.random.normal(0, 0.002))
+    st.session_state.demo_price = price
+    st.session_state.tick_count += 1
+    n = st.session_state.tick_count
+    st.session_state.demo_ticks.append({
+        "Date":   df_real["Date"].iloc[-1] + pd.Timedelta(days=n),
+        "Open":   price * (1 - np.random.uniform(0, 0.004)),
+        "High":   price * (1 + np.random.uniform(0.001, 0.008)),
+        "Low":    price * (1 - np.random.uniform(0.001, 0.008)),
+        "Close":  price,
+        "Volume": float(df_real["Volume"].iloc[-1]) * (0.85 + 0.3 * np.random.random()),
+    })
+    sim = pd.DataFrame(st.session_state.demo_ticks)
+    df = pd.concat([df_real, sim], ignore_index=True)
+else:
+    df = df_real
 
 df = add_indicators(df)
 m = compute_metrics(df)
 
-# ---- Metrix (real-time) ----
+# ----------------------------------------------------------------------------
+# Metrix realtime
+# ----------------------------------------------------------------------------
 c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric("Gia hien tai", f"${m['price']:.2f}", f"{m['change']:+.2f}%")
 c2.metric("RSI (14)", f"{m['rsi']:.1f}")
@@ -267,6 +330,12 @@ with tab_overview:
     s2.metric("Khoi luong TB 20p", f"{m['avg_vol']:,.0f}")
     s3.metric("Cao/Thap hom nay",
               f"${m['range_high']:.2f} / ${m['range_low']:.2f}")
+    if demo_mode:
+        st.caption(
+            "Demo: moi lan refresh them 1 tick mo phong, bieu do chi hien "
+            f"{WINDOW} nuoc gan nhat nen truot ve phai theo thoi gian "
+            f"(tick # {st.session_state.tick_count})."
+        )
 
 with tab_tech:
     st.plotly_chart(technical_chart(df), width="stretch")
