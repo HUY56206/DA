@@ -25,6 +25,7 @@ TICKERS = {
     "TSLA": "Tesla",
 }
 LOOKBACK_DAYS = 365
+REFRESH_SECONDS = 60
 
 
 # ----------------------------------------------------------------------------
@@ -258,20 +259,19 @@ def correla_heatmap(tickers: list, days: int = 365) -> go.Figure:
 # ----------------------------------------------------------------------------
 ticker = st.sidebar.selectbox("Co phieu", options=list(TICKERS),
                               format_func=lambda t: f"{t} - {TICKERS[t]}")
-interval = st.sidebar.slider("Tan suat cap nhat (giay)", 10, 300, 60, 10)
 days = st.sidebar.slider("Tong so ngay du lieu", 180, 730, 365, 30)
 view_days = st.sidebar.slider("So ngay hien thi tren bieu do", 30, 365, 180, 15)
 if view_days > days:
     view_days = days
 show_sma = st.sidebar.checkbox("Hien thi SMA 20/50", value=True)
 
-st_autorefresh(interval=interval * 1000, key="realtime")
+st_autorefresh(interval=REFRESH_SECONDS * 1000, key="realtime")
 
 now = dt.datetime.now()
 st.title("Realtime Dashboard - Tu dong cap nhat du lieu")
 st.caption(
-    f"Lan cap nhat cuoi: {now.strftime('%H:%M:%S')} (tu dong moi {interval}s) "
-    f"| nguon: Yahoo Finance"
+    f"Lan cap nhat cuoi: {now.strftime('%H:%M:%S')} "
+    "(tu dong moi phut) | nguon: Yahoo Finance"
 )
 
 df = fetch_history(ticker, days)
@@ -305,8 +305,7 @@ with tab_overview:
     s3.metric("Cao/Thap hom nay",
               f"${m['range_high']:.2f} / ${m['range_low']:.2f}")
     st.caption(
-        "Trang tu dong refresh moi "
-        f"{interval}s va lay lai du lieu moi tu Yahoo Finance "
+        "Trang tu dong refresh moi phut va lay lai du lieu moi tu Yahoo Finance "
         "(voi phien moi nhat khi co san, thong thuong 1 lan/ngay)."
     )
 
