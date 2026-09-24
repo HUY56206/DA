@@ -264,6 +264,7 @@ def correla_heatmap(tickers: list, days: int = 365) -> go.Figure:
 # ----------------------------------------------------------------------------
 # Giao dien
 # ----------------------------------------------------------------------------
+st.sidebar.markdown("### Thiết lập")
 ticker = st.sidebar.selectbox("Cổ phiếu", options=list(TICKERS),
                               format_func=lambda t: f"{t} - {TICKERS[t]}")
 days = st.sidebar.slider("Tổng số ngày dữ liệu", 180, 730, 365, 30)
@@ -274,13 +275,6 @@ show_sma = st.sidebar.checkbox("Hiển thị SMA 20/50", value=True)
 
 st_autorefresh(interval=REFRESH_SECONDS * 1000, key="realtime")
 
-now = dt.datetime.now()
-st.title("Dashboard Real-time – Tự động cập nhật dữ liệu")
-st.caption(
-    f"Lần cập nhật cuối: {now.strftime('%H:%M:%S')} "
-    "(tự động mỗi phút) | Nguồn: Yahoo Finance"
-)
-
 df = fetch_history(ticker, days)
 if df.empty:
     st.error("Không lấy được dữ liệu. Vui lòng thử lại sau giây lát.")
@@ -289,16 +283,55 @@ if df.empty:
 df = add_indicators(df)
 m = compute_metrics(df)
 
+now = dt.datetime.now()
+up = m["change"] >= 0
+pcolor = "#2ecc71" if up else "#e74c3c"
+arrow = "▲" if up else "▼"
+rsi_txt = (f"{m['rsi']:.1f}")
+rsi_state = "Quá mua" if m["rsi"] >= 70 else ("Quá bán" if m["rsi"] <= 30 else "Trung tính")
+
 # ----------------------------------------------------------------------------
-# Metrix realtime
+# Header: ten cong ty + gia lon + bien dong + thong tin phien
 # ----------------------------------------------------------------------------
-c1, c2, c3, c4, c5, c6 = st.columns(6)
-c1.metric("Giá hiện tại", f"${m['price']:.2f}", f"{m['change']:+.2f}%")
-c2.metric("RSI (14)", f"{m['rsi']:.1f}")
-c3.metric("Độ biến động 20p", f"{m['vol20'] * 100:.1f}%/năm")
-c4.metric("Lợi suất 1 năm", f"{m['cumret']:+.1f}%")
-c5.metric("Sharpe (ngày)", f"{m['sharpe']:.2f}" if not np.isnan(m['sharpe']) else "-")
-c6.metric("Max Drawdown", f"{m['max_dd']:.1f}%")
+st.markdown(
+    f"""
+    <div style="display:flex;justify-content:space-between;align-items:center;
+         background:#151B26;border:1px solid rgba(255,255,255,0.08);
+         border-radius:14px;padding:18px 24px;margin-bottom:14px;">
+      <div>
+        <div style="font-size:14px;color:#8B98A5;">{TICKERS[ticker]} · {ticker} ·
+            Nguồn: Yahoo Finance</div>
+        <div style="display:flex;align-items:baseline;gap:16px;margin-top:4px;">
+          <span style="font-size:38px;font-weight:800;color:#FFFFFF;">${m['price']:,.2f}</span>
+          <span style="font-size:20px;font-weight:700;color:{pcolor};">{arrow} {m['change']:+.2f}%</span>
+          <span style="font-size:14px;color:#8B98A5;">hôm nay</span>
+        </div>
+        <div style="font-size:13px;color:#8B98A5;margin-top:6px;">
+          Cao hôm nay ${m['range_high']:,.2f} &nbsp;·&nbsp; Thấp hôm nay ${m['range_low']:,.2f}
+          &nbsp;·&nbsp; Khối lượng {m['volume']:,.0f}
+        </div>
+      </div>
+      <div style="text-align:right;font-size:13px;color:#8B98A5;">
+        Cập nhật cuối<br>
+        <b style="color:#FFFFFF;font-size:20px;">{now.strftime('%H:%M:%S')}</b><br>
+        tự động mỗi phút
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ----------------------------------------------------------------------------
+# Metrix realtime (card tong hop)
+# ----------------------------------------------------------------------------
+with st.container(border=True):
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("Giá hiện tại", f"${m['price']:.2f}", f"{m['change']:+.2f}%")
+    c2.metric("RSI (14)", rsi_txt, rsi_state)
+    c3.metric("Độ biến động 20p", f"{m['vol20'] * 100:.1f}%/năm")
+    c4.metric("Lợi suất 1 năm", f"{m['cumret']:+.1f}%")
+    c5.metric("Sharpe (ngày)", f"{m['sharpe']:.2f}" if not np.isnan(m['sharpe']) else "-")
+    c6.metric("Max Drawdown", f"{m['max_dd']:.1f}%")
 
 tab_overview, tab_tech, tab_corr = st.tabs(
     ["Tổng quan", "Phân tích kỹ thuật", "Tương quan danh mục"]
@@ -317,7 +350,8 @@ with tab_overview:
     )
 
 with tab_tech:
-    st.plotly_chart(technical_chart(df), width="stretch")
+    with st.container(border=True):
+        st.plotly_chart(technical_chart(df), width="stretch")
     st.markdown(
         """
         **Giải thích chỉ báo (khái niệm khoa học):**
@@ -335,7 +369,8 @@ with tab_corr:
         default=["META", "AAPL", "NVDA", "GOOGL", "TSLA"],
     )
     if len(watchlist) >= 2:
-        st.plotly_chart(correla_heatmap(watchlist, days), width="stretch")
+        with st.container(border=True):
+            st.plotly_chart(correla_heatmap(watchlist, days), width="stretch")
         st.caption(
             "Heatmap tương quan lợi suất hàng ngày giữa các cổ phiếu – "
             "hệ số gần 1: đi cùng nhau, gần -1: ngược chiều."
