@@ -121,79 +121,57 @@ def compute_metrics(df: pd.DataFrame) -> dict:
 # Bieu do Plotly
 # ----------------------------------------------------------------------------
 def overview_chart(df: pd.DataFrame, sma: bool = True) -> go.Figure:
-    """Bieu do sang tao: line chia doan xanh/do theo trend + marker gradient
-    theo loi suat + duoi phat sang + volume."""
+    """Candlestick pro + SMA + volume + cham sang bien dong (dark theme)."""
     d = df.reset_index(drop=True)
-    rets = d["Return"].fillna(0)
 
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                        row_heights=[0.75, 0.25], vertical_spacing=0.04)
+                        row_heights=[0.78, 0.22], vertical_spacing=0.04)
 
-    # 1) Lop nen: area fill mo mau xanh
-    fig.add_trace(go.Scatter(
-        x=d["Date"], y=d["Close"], mode="lines", name="Close",
-        line=dict(width=0), fill="tozeroy",
-        fillcolor="rgba(70, 130, 220, 0.10)",
-        hoverinfo="skip",
-    ), row=1, col=1)
-
-    # 2) Line chia doan theo trend: doan tang = xanh, doan giam = do
-    sig = np.sign(rets)
-    i, n = 0, len(d)
-    while i < n:
-        j = i
-        while j < n and sig[j] == sig[i]:
-            j += 1
-        color = "#2ecc71" if sig[i] > 0 else ("#e74c3c" if sig[i] < 0 else "#95a5a6")
-        start = max(i - 1, 0)
-        fig.add_trace(go.Scatter(
-            x=d["Date"].iloc[start:j], y=d["Close"].iloc[start:j],
-            mode="lines", line=dict(color=color, width=3),
-            name="", showlegend=False, hoverinfo="skip",
-        ), row=1, col=1)
-        i = j
-
-    # 3) Marker gradient theo loi suat (xanh-vang-do) + bubble size
-    sizes = (7 + 2.4 * rets.abs()).clip(7, 14)
-    fig.add_trace(go.Scatter(
-        x=d["Date"], y=d["Close"], mode="markers", name="Return",
-        marker=dict(size=sizes, color=rets, colorscale="RdYlGn",
-                    cmin=-4, cmax=4, line=dict(color="white", width=0.7),
-                    showscale=True,
-                    colorbar=dict(title="Return %", thickness=13, len=0.7, outlinewidth=0)),
-        hovertemplate="%{x|%d/%m}<br>Close: $%{y:.2f}<br>Return: %{marker.color:.2f}%<extra></extra>",
-    ), row=1, col=1)
-
-    # 4) Duoi phat sang: 10 diem gan nhat
-    tail = d.tail(10)
-    glow = np.linspace(0.35, 1.0, len(tail))
-    fig.add_trace(go.Scatter(
-        x=tail["Date"], y=tail["Close"], mode="markers", name="Latest",
-        marker=dict(size=17, color=glow, colorscale="Reds",
-                    line=dict(color="white", width=1.5)),
-        hoverinfo="skip",
+    # 1) Candlestick: nen xanh (tang) / do (giam)
+    fig.add_trace(go.Candlestick(
+        x=d["Date"], open=d["Open"], high=d["High"], low=d["Low"], close=d["Close"],
+        name="Giá",
+        increasing=dict(line=dict(color="#2ecc71", width=1), fillcolor="#2ecc71"),
+        decreasing=dict(line=dict(color="#e74c3c", width=1), fillcolor="#e74c3c"),
+        whiskerwidth=0.25,
     ), row=1, col=1)
 
     if sma:
-        for col, color, name in (("SMA20", "#ffd54f", "SMA20"),
-                                 ("SMA50", "#8e99ff", "SMA50")):
-            fig.add_trace(go.Scatter(x=d["Date"], y=d[col], name=name,
-                                     line=dict(color=color, width=1.2)),
-                          row=1, col=1)
+        fig.add_trace(go.Scatter(x=d["Date"], y=d["SMA20"], name="SMA20",
+                                 line=dict(color="#ffd54f", width=1.5)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=d["Date"], y=d["SMA50"], name="SMA50",
+                                 line=dict(color="#7c9cff", width=1.5)), row=1, col=1)
 
-    # 5) Volume theo ngay tang/giam
-    vol_colors = np.where(d["Close"] >= d["Open"], "#26a69a", "#ef5350")
-    fig.add_trace(go.Bar(x=d["Date"], y=d["Volume"], name="Volume",
-                         marker_color=vol_colors, opacity=0.7),
-                  row=2, col=1)
+    # 2) Cham sang boi toan diem gia moi nhat
+    last = d.iloc[-1]
+    fig.add_trace(go.Scatter(
+        x=[last["Date"]], y=[last["Close"]], mode="markers", name="Hôm nay",
+        marker=dict(size=15, color="#ff6b6b",
+                    line=dict(color="white", width=2)),
+        hovertemplate="%{x|%d/%m} – đóng cửa: $%{y:.2f}<extra></extra>",
+    ), row=1, col=1)
+
+    # 3) Volume mau theo phien tang/giam
+    vol_colors = np.where(d["Close"] >= d["Open"],
+                          "rgba(46, 204, 113, 0.55)", "rgba(231, 76, 60, 0.55)")
+    fig.add_trace(go.Bar(x=d["Date"], y=d["Volume"], name="Khối lượng",
+                         marker_color=vol_colors), row=2, col=1)
 
     fig.update_layout(
-        template="plotly_white", hovermode="x unified", height=560,
-        margin=dict(t=30, b=30, l=50, r=70), showlegend=True,
-        uirevision="fixed",
+        template="plotly_dark", hovermode="x unified", height=600,
+        margin=dict(t=40, b=20, l=40, r=30),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#E6EDF3"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                    xanchor="left", x=0, font=dict(size=12)),
+        xaxis_rangeslider_visible=False, uirevision="fixed",
     )
-    fig.update_yaxes(title_text="Price (USD)", row=1, col=1)
-    fig.update_yaxes(title_text="Volume", row=2, col=1, showticklabels=False)
+    fig.update_xaxes(showgrid=False,
+                     rangebreaks=[dict(bounds=["sat", "mon"])])
+    fig.update_yaxes(title_text="Giá (USD)", row=1, col=1,
+                     gridcolor="rgba(255,255,255,0.08)")
+    fig.update_yaxes(title_text="KL", row=2, col=1, showticklabels=False,
+                     gridcolor="rgba(255,255,255,0.08)")
     return fig
 
 
@@ -201,33 +179,53 @@ def technical_chart(df: pd.DataFrame) -> go.Figure:
     fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
                         row_heights=[0.5, 0.25, 0.25], vertical_spacing=0.05)
 
+    # Gia + Bollinger Bands (fill vung giua hai day)
     fig.add_trace(go.Scatter(x=df["Date"], y=df["Close"], name="Close",
-                             line=dict(color="#2c3e50", width=2)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df["Date"], y=df["BB_up"], name="BB upper",
-                             line=dict(color="gray", dash="dot", width=1)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df["Date"], y=df["BB_low"], name="BB lower",
-                             line=dict(color="gray", dash="dot", width=1)),
+                             line=dict(color="#7c9cff", width=2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df["Date"], y=df["BB_up"], name="BB trên",
+                             line=dict(color="rgba(255,255,255,0.35)",
+                                       dash="dot", width=1)),
                   row=1, col=1)
-    fig.add_trace(go.Scatter(x=df["Date"], y=df["BB_mid"], name="BB mid (SMA20)",
-                             line=dict(color="#ffd54f", width=1.2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df["Date"], y=df["BB_low"], name="BB dưới",
+                             line=dict(color="rgba(255,255,255,0.35)",
+                                       dash="dot", width=1),
+                             fill="tonexty",
+                             fillcolor="rgba(124, 156, 255, 0.12)"),
+                  row=1, col=1)
 
+    # RSI + vung mua ban
     fig.add_trace(go.Scatter(x=df["Date"], y=df["RSI"], name="RSI",
-                             line=dict(color="#9b59b6", width=1.5)), row=2, col=1)
-    fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
-    fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
+                             line=dict(color="#c678dd", width=2),
+                             fill="tozeroy",
+                             fillcolor="rgba(198, 120, 221, 0.10)"), row=2, col=1)
+    fig.add_hline(y=70, line_dash="dash", line_color="#e74c3c",
+                  annotation_text="Quá mua", row=2, col=1)
+    fig.add_hline(y=30, line_dash="dash", line_color="#2ecc71",
+                  annotation_text="Quá bán", row=2, col=1)
 
+    # MACD + histogram
     fig.add_trace(go.Scatter(x=df["Date"], y=df["MACD"], name="MACD",
-                             line=dict(color="blue", width=1.5)), row=3, col=1)
+                             line=dict(color="#7c9cff", width=1.5)), row=3, col=1)
     fig.add_trace(go.Scatter(x=df["Date"], y=df["Signal"], name="Signal",
-                             line=dict(color="orange", width=1.2)), row=3, col=1)
+                             line=dict(color="#ffd54f", width=1.2)), row=3, col=1)
     fig.add_bar(x=df["Date"], y=np.where(df["MACD"] >= df["Signal"], df["MACD"], 0),
-                name="Hist +", marker_color="#26a69a", opacity=0.4, row=3, col=1)
+                name="Hist +", marker_color="#2ecc71", opacity=0.5, row=3, col=1)
     fig.add_bar(x=df["Date"], y=np.where(df["MACD"] < df["Signal"], df["MACD"], 0),
-                name="Hist -", marker_color="#ef5350", opacity=0.4, row=3, col=1)
+                name="Hist -", marker_color="#e74c3c", opacity=0.5, row=3, col=1)
 
-    fig.update_layout(template="plotly_white", hovermode="x unified",
-                      height=760, margin=dict(t=30, b=30, l=50, r=20))
-    fig.update_yaxes(title_text="Price", row=1, col=1)
+    fig.update_layout(
+        template="plotly_dark", hovermode="x unified", height=780,
+        margin=dict(t=30, b=30, l=40, r=20),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#E6EDF3"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                    xanchor="left", x=0),
+    )
+    fig.update_xaxes(showgrid=False,
+                     rangebreaks=[dict(bounds=["sat", "mon"])])
+    for r in (1, 2, 3):
+        fig.update_yaxes(gridcolor="rgba(255,255,255,0.08)", row=r, col=1)
+    fig.update_yaxes(title_text="Giá + BB", row=1, col=1)
     fig.update_yaxes(title_text="RSI", row=2, col=1, range=[0, 100])
     fig.update_yaxes(title_text="MACD", row=3, col=1)
     return fig
@@ -244,39 +242,48 @@ def correla_heatmap(tickers: list, days: int = 365) -> go.Figure:
     corr = frame.corr()
     fig = go.Figure(go.Heatmap(
         z=corr.values, x=list(corr.columns), y=list(corr.columns),
-        colorscale="RdBu_r", zmin=-1, zmax=1,
+        colorscale="RdYlGn", zmin=-1, zmax=1,
         text=np.round(corr.values, 2), texttemplate="%{text}",
+        textfont=dict(size=16),
         hovertemplate="%{x} ~ %{y}: %{z:.2f}<extra></extra>",
+        colorbar=dict(title="r", thickness=14, outlinewidth=0),
     ))
-    fig.update_layout(template="plotly_white", height=520,
-                      title="Ma tran tuong quan loi suat hang ngay",
-                      margin=dict(t=60, b=40, l=40, r=30))
+    fig.update_layout(
+        template="plotly_dark", height=540,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#E6EDF3"),
+        title=dict(text="Ma trận tương quan lợi suất hàng ngày",
+                   x=0.02, font=dict(size=18)),
+        margin=dict(t=60, b=40, l=40, r=30),
+    )
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=False)
     return fig
 
 
 # ----------------------------------------------------------------------------
 # Giao dien
 # ----------------------------------------------------------------------------
-ticker = st.sidebar.selectbox("Co phieu", options=list(TICKERS),
+ticker = st.sidebar.selectbox("Cổ phiếu", options=list(TICKERS),
                               format_func=lambda t: f"{t} - {TICKERS[t]}")
-days = st.sidebar.slider("Tong so ngay du lieu", 180, 730, 365, 30)
-view_days = st.sidebar.slider("So ngay hien thi tren bieu do", 30, 365, 180, 15)
+days = st.sidebar.slider("Tổng số ngày dữ liệu", 180, 730, 365, 30)
+view_days = st.sidebar.slider("Số ngày hiển thị trên biểu đồ", 30, 365, 180, 15)
 if view_days > days:
     view_days = days
-show_sma = st.sidebar.checkbox("Hien thi SMA 20/50", value=True)
+show_sma = st.sidebar.checkbox("Hiển thị SMA 20/50", value=True)
 
 st_autorefresh(interval=REFRESH_SECONDS * 1000, key="realtime")
 
 now = dt.datetime.now()
-st.title("Realtime Dashboard - Tu dong cap nhat du lieu")
+st.title("Dashboard Real-time – Tự động cập nhật dữ liệu")
 st.caption(
-    f"Lan cap nhat cuoi: {now.strftime('%H:%M:%S')} "
-    "(tu dong moi phut) | nguon: Yahoo Finance"
+    f"Lần cập nhật cuối: {now.strftime('%H:%M:%S')} "
+    "(tự động mỗi phút) | Nguồn: Yahoo Finance"
 )
 
 df = fetch_history(ticker, days)
 if df.empty:
-    st.error("Khong lay duoc du lieu. Vui long thu lai sau giay lat.")
+    st.error("Không lấy được dữ liệu. Vui lòng thử lại sau giây lát.")
     st.stop()
 
 df = add_indicators(df)
@@ -286,55 +293,55 @@ m = compute_metrics(df)
 # Metrix realtime
 # ----------------------------------------------------------------------------
 c1, c2, c3, c4, c5, c6 = st.columns(6)
-c1.metric("Gia hien tai", f"${m['price']:.2f}", f"{m['change']:+.2f}%")
+c1.metric("Giá hiện tại", f"${m['price']:.2f}", f"{m['change']:+.2f}%")
 c2.metric("RSI (14)", f"{m['rsi']:.1f}")
-c3.metric("Do bien dong 20p", f"{m['vol20'] * 100:.1f}%/nam")
-c4.metric("Loi suat 1 nam", f"{m['cumret']:+.1f}%")
-c5.metric("Sharpe (ngay)", f"{m['sharpe']:.2f}" if not np.isnan(m['sharpe']) else "-")
+c3.metric("Độ biến động 20p", f"{m['vol20'] * 100:.1f}%/năm")
+c4.metric("Lợi suất 1 năm", f"{m['cumret']:+.1f}%")
+c5.metric("Sharpe (ngày)", f"{m['sharpe']:.2f}" if not np.isnan(m['sharpe']) else "-")
 c6.metric("Max Drawdown", f"{m['max_dd']:.1f}%")
 
 tab_overview, tab_tech, tab_corr = st.tabs(
-    ["Tong quan", "Phan tich ky thuat", "Tuong quan danh muc"]
+    ["Tổng quan", "Phân tích kỹ thuật", "Tương quan danh mục"]
 )
 
 with tab_overview:
     st.plotly_chart(overview_chart(df.tail(view_days), show_sma), width="stretch")
     s1, s2, s3 = st.columns(3)
-    s1.metric("Khoi luong (hom nay)", f"{m['volume']:,.0f}")
-    s2.metric("Khoi luong TB 20p", f"{m['avg_vol']:,.0f}")
-    s3.metric("Cao/Thap hom nay",
+    s1.metric("Khối lượng (hôm nay)", f"{m['volume']:,.0f}")
+    s2.metric("Khối lượng TB 20p", f"{m['avg_vol']:,.0f}")
+    s3.metric("Cao/Thấp hôm nay",
               f"${m['range_high']:.2f} / ${m['range_low']:.2f}")
     st.caption(
-        "Trang tu dong refresh moi phut va lay lai du lieu moi tu Yahoo Finance "
-        "(voi phien moi nhat khi co san, thong thuong 1 lan/ngay)."
+        "Trang tự động refresh mỗi phút và lấy lại dữ liệu mới từ Yahoo Finance "
+        "(với phiên mới nhất khi có sẵn, thông thường 1 lần/ngày)."
     )
 
 with tab_tech:
     st.plotly_chart(technical_chart(df), width="stretch")
     st.markdown(
         """
-        **Giai thich chi bao (khai niem khoa hoc):**
-        - **RSI (Relative Strength Index)**: do luc mua/ban. >70 qua mua, <30 qua ban.
-        - **MACD (Moving Average Convergence Divergence)**: hieu EMA12 va EMA26.
-          Khi MACD cat len Signal = tin hieu tang, cat xuong = tin hieu giam.
-        - **Bollinger Bands**: SMA20 +/- 2*std(20). Gia cham day tren (duoi) thuong
-          bi co lai (revert to the mean).
+        **Giải thích chỉ báo (khái niệm khoa học):**
+        - **RSI (Relative Strength Index)**: đo lực mua/bán. >70 quá mua, <30 quá bán.
+        - **MACD (Moving Average Convergence Divergence)**: hiệu EMA12 và EMA26.
+          Khi MACD cắt lên Signal = tín hiệu tăng, cắt xuống = tín hiệu giảm.
+        - **Bollinger Bands**: SMA20 ± 2×std(20). Giá chạm dải trên (dưới) thường
+          bị co kéo trở lại vùng giữa (revert to the mean).
         """
     )
 
 with tab_corr:
     watchlist = st.multiselect(
-        "Chon danh muc de so sanh", list(TICKERS),
+        "Chọn danh mục để so sánh", list(TICKERS),
         default=["META", "AAPL", "NVDA", "GOOGL", "TSLA"],
     )
     if len(watchlist) >= 2:
         st.plotly_chart(correla_heatmap(watchlist, days), width="stretch")
         st.caption(
-            "Heatmap tuong quan loi suat hang ngay giua cac co phieu - "
-            "he so gan 1: di cung nhau, gan -1: nguoc chieu."
+            "Heatmap tương quan lợi suất hàng ngày giữa các cổ phiếu – "
+            "hệ số gần 1: đi cùng nhau, gần -1: ngược chiều."
         )
     else:
-        st.info("Chon it nhat 2 co phieu de xem ma tran tuong quan.")
+        st.info("Chọn ít nhất 2 cổ phiếu để xem ma trận tương quan.")
 
 st.divider()
-st.caption("Do an mon PTDLNC - Ky thuat Real-Time Updates (Streamlit + Yahoo Finance).")
+st.caption("Đồ án môn PTDLNC – Kỹ thuật Real-Time Updates (Streamlit + Yahoo Finance).")
