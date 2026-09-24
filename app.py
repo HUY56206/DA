@@ -25,7 +25,6 @@ TICKERS = {
     "TSLA": "Tesla",
 }
 LOOKBACK_DAYS = 365
-WINDOW = 90  # so nuoc cuoi cung hien thi -> cua so truot
 
 
 # ----------------------------------------------------------------------------
@@ -122,8 +121,8 @@ def compute_metrics(df: pd.DataFrame) -> dict:
 # ----------------------------------------------------------------------------
 def overview_chart(df: pd.DataFrame, sma: bool = True) -> go.Figure:
     """Bieu do sang tao: line chia doan xanh/do theo trend + marker gradient
-    theo loi suat + duoi phat sang + volume. Cua so truot (WINDOW)."""
-    d = df.tail(WINDOW).reset_index(drop=True)
+    theo loi suat + duoi phat sang + volume."""
+    d = df.reset_index(drop=True)
     rets = d["Return"].fillna(0)
 
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
@@ -259,51 +258,26 @@ def correla_heatmap(tickers: list, days: int = 365) -> go.Figure:
 # ----------------------------------------------------------------------------
 ticker = st.sidebar.selectbox("Co phieu", options=list(TICKERS),
                               format_func=lambda t: f"{t} - {TICKERS[t]}")
-interval = st.sidebar.slider("Tan suat cap nhat (giay)", 5, 120, 30, 5)
-days = st.sidebar.slider("So ngay du lieu", 180, 730, 365, 30)
+interval = st.sidebar.slider("Tan suat cap nhat (giay)", 10, 300, 60, 10)
+days = st.sidebar.slider("Tong so ngay du lieu", 180, 730, 365, 30)
+view_days = st.sidebar.slider("So ngay hien thi tren bieu do", 30, 365, 180, 15)
+if view_days > days:
+    view_days = days
 show_sma = st.sidebar.checkbox("Hien thi SMA 20/50", value=True)
-demo_mode = st.sidebar.checkbox(
-    "Mo phong tick real-time (bieu do truot theo thoi gian)", value=True)
 
 st_autorefresh(interval=interval * 1000, key="realtime")
 
 now = dt.datetime.now()
-st.title("Realtime Dashboard - Chuyen dong theo thoi gian")
+st.title("Realtime Dashboard - Tu dong cap nhat du lieu")
 st.caption(
-    f"Cap nhat luc {now.strftime('%H:%M:%S')} | moi {interval}s | nguon: Yahoo Finance"
+    f"Lan cap nhat cuoi: {now.strftime('%H:%M:%S')} (tu dong moi {interval}s) "
+    f"| nguon: Yahoo Finance"
 )
 
-df_real = fetch_history(ticker, days)
-if df_real.empty:
+df = fetch_history(ticker, days)
+if df.empty:
     st.error("Khong lay duoc du lieu. Vui long thu lai sau giay lat.")
     st.stop()
-
-# ----------------------------------------------------------------------------
-# Trang thai demo: moi lan refresh them 1 tick, cua so truot ve phai
-# ----------------------------------------------------------------------------
-if "ticker" not in st.session_state or st.session_state.ticker != ticker:
-    st.session_state.ticker = ticker
-    st.session_state.demo_price = float(df_real["Close"].iloc[-1])
-    st.session_state.demo_ticks = []
-    st.session_state.tick_count = 0
-
-if demo_mode:
-    price = st.session_state.demo_price * (1 + np.random.normal(0, 0.002))
-    st.session_state.demo_price = price
-    st.session_state.tick_count += 1
-    n = st.session_state.tick_count
-    st.session_state.demo_ticks.append({
-        "Date":   df_real["Date"].iloc[-1] + pd.Timedelta(days=n),
-        "Open":   price * (1 - np.random.uniform(0, 0.004)),
-        "High":   price * (1 + np.random.uniform(0.001, 0.008)),
-        "Low":    price * (1 - np.random.uniform(0.001, 0.008)),
-        "Close":  price,
-        "Volume": float(df_real["Volume"].iloc[-1]) * (0.85 + 0.3 * np.random.random()),
-    })
-    sim = pd.DataFrame(st.session_state.demo_ticks)
-    df = pd.concat([df_real, sim], ignore_index=True)
-else:
-    df = df_real
 
 df = add_indicators(df)
 m = compute_metrics(df)
@@ -324,18 +298,17 @@ tab_overview, tab_tech, tab_corr = st.tabs(
 )
 
 with tab_overview:
-    st.plotly_chart(overview_chart(df, show_sma), width="stretch")
+    st.plotly_chart(overview_chart(df.tail(view_days), show_sma), width="stretch")
     s1, s2, s3 = st.columns(3)
     s1.metric("Khoi luong (hom nay)", f"{m['volume']:,.0f}")
     s2.metric("Khoi luong TB 20p", f"{m['avg_vol']:,.0f}")
     s3.metric("Cao/Thap hom nay",
               f"${m['range_high']:.2f} / ${m['range_low']:.2f}")
-    if demo_mode:
-        st.caption(
-            "Demo: moi lan refresh them 1 tick mo phong, bieu do chi hien "
-            f"{WINDOW} nuoc gan nhat nen truot ve phai theo thoi gian "
-            f"(tick # {st.session_state.tick_count})."
-        )
+    st.caption(
+        "Trang tu dong refresh moi "
+        f"{interval}s va lay lai du lieu moi tu Yahoo Finance "
+        "(voi phien moi nhat khi co san, thong thuong 1 lan/ngay)."
+    )
 
 with tab_tech:
     st.plotly_chart(technical_chart(df), width="stretch")

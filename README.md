@@ -4,8 +4,7 @@
 
 ## Tính năng
 
-- **Real-Time Updates**: app tự cập nhật định kỳ (5–120 giây, tùy chỉnh) qua `streamlit-autorefresh`; metrics và biểu đồ làm mới ngay trên trang — không cần bấm refresh.
-- **Biểu đồ trượt theo thời gian**: ở chế độ *mô phỏng tick real-time*, mỗi lần refresh app tự thêm 1 tick và chỉ hiển thị 90 nốt gần nhất → biểu đồ **dịch chuyển sang phải theo thời gian thực** (sliding window), kèm chấm sáng đỏ cho giá mới nhất.
+- **Real-Time Updates**: app **tự động cập nhật** định kỳ (10–300 giây, tùy chỉnh) qua `streamlit-autorefresh`; metrics và biểu đồ tải lại **dữ liệu mới nhất từ Yahoo Finance** ngay trên trang — không cần bấm refresh.
 - **Dữ liệu thật**: lịch sử OHLCV của `META` (hoặc 7 mã: AAPL, MSFT, GOOGL, AMZN, NVDA, TSLA) lấy trực tiếp từ **Yahoo Finance**, không cần API key.
 - **Hàm lượng khoa học**:
   - Biểu đồ chính sáng tạo: line chia đoạn **xanh/đỏ theo trend** + marker gradient RdYlGn (lợi suất ngày) + vùng lấp đầy + volume.
@@ -71,5 +70,6 @@ Heroku đã bỏ free tier (cần thẻ tín dụng) nên ưu tiên Streamlit Cl
 ## Lưu ý kỹ thuật về "Real-Time Updates"
 
 - Cơ chế: `st_autorefresh(interval, key)` khiến Streamlit **chạy lại toàn bộ script** mỗi `interval` giây (tương đương vòng lặp UI thread trong Dash context, nhưng đúng chuẩn Streamlit). Dữ liệu được cache bằng `@st.cache_data(ttl=30)` nên mỗi lần rerun chỉ fetch lại khi hết TTL.
-- Muốn realtime **thực sự** (tick tới từng giây) cần WebSocket (ví dụ Alpaca, Binance, Polygon). Ở bài này, tự cập nhật vài chục giây/lần là phù hợp ngữ cảnh "Real-Time Updates" trong slide 3.
+- Vì dữ liệu Yahoo Finance cập nhật theo **phiên giao dịch ngày** (thường 1 lần/ngày), dashboard sẽ nhận được giá/phân tích mới ngay khi phiên mới xuất hiện — không cần thao tác tay. Tần suất cập nhật cho hiệu ứng "realtime" nên để từ vài chục giây trở lên (mặc định mỗi 60 giây).
+- Nếu cần tick **thực sự theo từng giây** (thị trường chứng khoán Mỹ đóng cửa thì không có tick mới) thì phải dùng nguồn theo từng phút qua WebSocket (Vantage, Polygon, Alpaca). Ở bài này, tự cập nhật số liệu mới vài chục giây/lần là phù hợp ngữ cảnh "Real-Time Updates" trong slide 3.
 - Hệ số tương quan dùng `pct_change()` (lợi suất hàng ngày) trước khi `corr()` để tránh tương quan giả do xu hướng giá.
